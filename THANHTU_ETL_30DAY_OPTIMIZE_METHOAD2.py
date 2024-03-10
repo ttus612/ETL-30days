@@ -7,11 +7,11 @@ from pyspark.sql.functions import *
 def main_task(path):
 
     print("-----------------------------------")
-    print("Start processing data")
-    print("-----------------------------------")
-
-    print("-----------------------------------")
     print("Reading data from file")
+    print("-----------------------------------")
+	
+    print("-----------------------------------")
+    print("Path: " + path)
     print("-----------------------------------")
 
     print("-----------------------------------")
@@ -19,16 +19,6 @@ def main_task(path):
     print("Read data success")
     print("-----------------------------------")
 
-    print("-----------------------------------")
-    print("Show data & structure")
-    print("-----------------------------------")
-    ds.show()
-    ds.printSchema()
-    ds.select('_source').printSchema()
-    
-    print("-----------------------------------")
-    print("Processing data")
-    print("-----------------------------------")
     ds = ds.withColumn('Category',
                 when(
                      (col('_source.AppName') == 'KPLUS') | 
@@ -55,18 +45,68 @@ def main_task(path):
                 .otherwise("Khác")
             )
     
+    return ds
+	
+
+def convert_to_datevalue(value):
+	date_value = datetime.datetime.strptime(value,"%Y%m%d").date()
+	return date_value
+	
+def date_range(start_date, end_date):
+	date_list = []
+	current_date = start_date
+	while current_date <= end_date:
+		date_list.append(current_date.strftime("%Y%m%d"))
+		current_date += datetime.timedelta(days=1)
+	return date_list
+	
+def genarate_date_range(from_date, to_date):
+	from_date = convert_to_datevalue(from_date)
+	to_date = convert_to_datevalue(to_date)	
+	date_list = date_range(from_date, to_date)
+	return date_list
+	
+if __name__ == "__main__":
+    findspark.init()
+
+    spark = SparkSession.builder.config("spark.driver.memory", "8g").getOrCreate()
+
+    path = 'D:\\WORKSPACE\\DE\\study_de\\Big_Data\\Items Shared on 4-29-2023\\Dataset\\log_content'
+
+    # Dùng để lấy tất cả tên của fil trong thư mục
+    # list_files = os.listdir(path)
+
+    # Chọn ngày mình muốn xử lý
+    list_files = genarate_date_range('20220401', '20220403')
+
     print("-----------------------------------")
-    print("Show data & structure after processing")
+    print("Start processing data")
     print("-----------------------------------")
-    ds.show()
-   
+
+
+    final_result = None
+    for file_name in list_files:
+        print(f"==> Processing file {file_name} <==")
+        path_new = path + '\\' + file_name + '.json'
+        processed_data = main_task(path_new)
+        if final_result is None:
+            final_result = processed_data
+        else:
+            final_result = final_result.unionAll(processed_data)
+
+    print("-----------------------------------")
+    print("Show data & structure after read all files")
+    print("-----------------------------------")
+    final_result.show()
+
     print("-----------------------------------")
     print("Group by data")
     print("-----------------------------------")
-    grouped_data = ds.groupBy('_source.Contract', 'Category').agg(
+    grouped_data = final_result.groupBy('_source.Contract', 'Category').agg(
         sum('_source.TotalDuration').alias('TotalDuration')
     )
-    
+
+        
     print("-----------------------------------")
     print("Show grouped data")
     print("-----------------------------------")
@@ -95,61 +135,12 @@ def main_task(path):
     print("-----------------------------------")
     print("Save data")
     print("-----------------------------------")
-    # pivot_data.repartition(1).write.csv(save_path, header=True)
+
+    save_path = "D:\\WORKSPACE\\DE\\study_de\\Practice\\Class3_Class4\\Storage\\Methoad2"
+    pivot_data.repartition(1).write.csv(save_path, header=True)
     # pivot_data.coalesce(1).write.option("header","true").format("csv").save(save_path)
 
     print("-----------------------------------")
     print("End processing data")
     print("-----------------------------------")
-
-    return pivot_data
-	
-
-def convert_to_datevalue(value):
-	date_value = datetime.datetime.strptime(value,"%Y%m%d").date()
-	return date_value
-	
-def date_range(start_date, end_date):
-	date_list = []
-	current_date = start_date
-	while current_date <= end_date:
-		date_list.append(current_date.strftime("%Y%m%d"))
-		current_date += datetime.timedelta(days=1)
-	return date_list
-	
-def genarate_date_range(from_date, to_date):
-	from_date = convert_to_datevalue(from_date)
-	to_date = convert_to_datevalue(to_date)	
-	date_list = date_range(from_date, to_date)
-	return date_list
-	
-if __name__ == "__main__":
-    findspark.init()
-
-    spark = SparkSession.builder.config("spark.driver.memory", "8g").getOrCreate()
-
-    path = 'D:\\WORKSPACE\\DE\\study_de\\Big_Data\\Items Shared on 4-29-2023\\Dataset\\log_content'
-    list_files = os.listdir(path)
-
-    final_result = None
-
-    for file_name in list_files:
-        print(f"==> Processing file {file_name} <==")
-        path_new = path + '\\' + file_name
-        processed_data = main_task(path_new)
-
-        if final_result is None:
-            final_result = processed_data
-        else:
-            final_result = final_result.unionAll(processed_data)
-
-    print("-----------------------------------")
-    print("Result after processing all files")
-    print("-----------------------------------")
-    final_result.show()
-    print("-----------------------------------")
-    print("Save data")
-    print("-----------------------------------")
-    save_path = "D:\\WORKSPACE\\DE\\study_de\\Practice\\Class3\\Thanh_Tu_ETL\\Store_ETL_30Day"
-    final_result.repartition(1).write.csv(save_path, header=True)
-    # print(genarate_date_range('20220401', '20220430'))
+		
